@@ -1,6 +1,7 @@
 #pragma once
 
 #include "git_engine.hpp"
+#include "repo_browser.hpp"
 
 #include <gtkmm.h>
 #include <memory>
@@ -85,13 +86,15 @@ private:
     Gtk::TextView      diff_view_;
     Gtk::ScrolledWindow branch_scroll_;
     Gtk::TreeView      branch_tree_;
+    std::unique_ptr<RepoBrowser> repo_browser_;
 
     // Toolbar
     Gtk::Toolbar      toolbar_;
     Gtk::ToolButton  btn_clone_tool_{"Clone"}, btn_commit_tool_{"Commit"},
                     btn_push_{"Push"}, btn_pull_{"Pull"},
                     btn_fetch_{"Fetch"}, btn_merge_{"Merge"},
-                    btn_branch_{"Branch"}, btn_refresh_{"Refresh"};
+                    btn_branch_{"Branch"}, btn_refresh_{"Refresh"},
+                    btn_settings_{"Settings"};
 
     Gtk::Label        repo_label_;
     Gtk::Label        branch_label_;
@@ -103,6 +106,7 @@ private:
     void setup_log_panel();
     void setup_diff_panel();
     void setup_branch_panel();
+    void setup_repo_browser_panel();
 
     void load_repo(const std::string& path);
     void refresh_status();

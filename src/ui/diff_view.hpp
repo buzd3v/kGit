@@ -1,15 +1,21 @@
 #pragma once
 
 #include <gtkmm.h>
-#include <string>
+#include <memory>
 #include <vector>
 
-class DiffView : public Gtk::ScrolledWindow {
+struct DiffFile;
+
+class DiffView : public Gtk::Box {
 public:
     DiffView();
-    void set_diff(const std::vector<struct DiffFile>& files);
+    void set_diff(const std::vector<DiffFile>& files);
     void clear();
 
+    /// Emitted when user clicks "Revert" for a file.
+    sigc::signal<void(const std::string& path)>& signal_file_revert();
+
 private:
-    Gtk::TextView text_view_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };

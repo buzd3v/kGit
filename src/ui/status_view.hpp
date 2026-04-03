@@ -2,6 +2,7 @@
 
 #include <gtkmm.h>
 #include <vector>
+#include <memory>
 
 struct RepoStatus;
 
@@ -12,11 +13,10 @@ public:
     void set_status(const std::vector<RepoStatus>& statuses);
     void clear();
 
-    sigc::signal<void(const std::string& path, bool staged)>& signal_file_toggled() {
-        return signal_file_toggled_;
-    }
+    /// Emitted when user wants to stage/unstage or revert a file.
+    sigc::signal<void(const std::string& path, bool staged)>& signal_file_toggled();
 
 private:
-    Gtk::TreeView tree_view_;
-    sigc::signal<void(const std::string&, bool)> signal_file_toggled_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };

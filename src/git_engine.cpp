@@ -22,6 +22,9 @@
 #include <cstring>
 #include <ctime>
 #include <sstream>
+#include <fstream>
+#include <cstdio>   // std::tmpnam, std::remove
+#include <cerrno>
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -230,7 +233,6 @@ GitResult<std::string> GitEngine::commit(const CommitOpts& opts)
             git_reference_free(head);
         }
     } else {
-        // For amend: look up the current HEAD commit directly
         git_reference* head = nullptr;
         if (git_repository_head(&head, repo_) == 0) {
             git_commit* head_cmt = nullptr;
@@ -244,9 +246,54 @@ GitResult<std::string> GitEngine::commit(const CommitOpts& opts)
     if (!sig_result.ok()) { git_tree_free(tree); return {{}, sig_result.error}; }
     git_signature* sig = sig_result.value;
 
+    // ── Build message with sign-off ───────────────────────────────────────
+    std::string final_msg = opts.message;
+    if (opts.signoff) {
+        std::string sob = "Signed-off-by: ";
+        sob += sig->name ? sig->name : "Unknown";
+        sob += " <";
+        sob += sig->email ? sig->email : "unknown@email";
+        sob += ">\n";
+        final_msg += "\n" + sob;
+    }
+
+    // ── GPG signing: delegate to `git commit` ─────────────────────────────
+    // libgit2 does not natively sign commits; we write the message to a temp
+    // file and invoke `git commit --gpg-sign`.
+    if (opts.gpg_sign) {
+        // Free resources before handing off to `git commit`.
+        git_tree_free(tree);
+        for (auto p : parents) git_commit_free(const_cast<git_commit*>(p));
+        git_signature_free(sig);
+
+        std::string wd = git_repository_workdir(repo_) ? git_repository_workdir(repo_) : ".";
+        (void)system(("git -C " + wd + " add -A").c_str());
+
+        char tmp_path[L_tmpnam];
+        if (!std::tmpnam(tmp_path)) return {{}, {EIO, "Failed to create temp file"}};
+        {
+            std::ofstream f(tmp_path);
+            if (!f) return {{}, {EIO, "Failed to write temp file"}};
+            f << final_msg;
+        }
+
+        std::string cmd = "git -C " + wd + " commit --file=" + std::string(tmp_path);
+        if (opts.amend) cmd += " --amend";
+        cmd += " -S";
+        if (!opts.gpg_key_id.empty()) cmd += " " + opts.gpg_key_id;
+
+        int r = system(cmd.c_str());
+        std::remove(tmp_path);
+        if (r != 0) return {{}, {EIO, "GPG-signed commit failed. Is GPG configured?"}};
+
+        auto hc = head_commit();
+        if (!hc.ok()) return {{}, hc.error};
+        return GitResult<std::string>{hc.value.id, {}};
+    }
+
     git_oid commit_id;
     err = git_commit_create(&commit_id, repo_, "HEAD", sig, sig, nullptr,
-                            opts.message.c_str(), tree,
+                            final_msg.c_str(), tree,
                             static_cast<int>(parents.size()),
                             parents.data());
 

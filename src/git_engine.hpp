@@ -138,6 +138,12 @@ struct CommitOpts {
     bool amend = false;
     std::optional<std::string> author_name;
     std::optional<std::string> author_email;
+    /// Prepend "Signed-off-by:" line to the message.
+    bool signoff = false;
+    /// Request GPG signing of the commit.
+    bool gpg_sign = false;
+    /// GPG key ID (empty = use default key).
+    std::string gpg_key_id;
 };
 
 // ─── GitEngine ───────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@
 #include "clone_dialog.hpp"
 #include "commit_dialog.hpp"
 #include "settings_dialog.hpp"
+#include "repo_browser.hpp"
+#include "common.hpp"
 
 #include <giomm/menu.h>
 
@@ -110,6 +112,20 @@ void MainWindow::build_ui()
     toolbar_.add(btn_merge_);
     toolbar_.add(btn_branch_);
     toolbar_.add(btn_refresh_);
+    toolbar_.add(btn_settings_);
+    btn_settings_.set_tooltip_text("Settings");
+    btn_settings_.signal_clicked().connect([this] {
+        SettingsDialog dlg(*this);
+        dlg.signal_settings_changed().connect([&](const Settings& s) {
+            // Apply theme preference
+            switch (s.theme) {
+                case Theme::Light:  ui::apply_dark_theme(false); break;
+                case Theme::Dark:   ui::apply_dark_theme(true);  break;
+                case Theme::System: /* follow system — already default */ break;
+            }
+        });
+        dlg.run();
+    });
 
     main_box_.set_hexpand(true);
     main_box_.set_vexpand(true);
@@ -121,6 +137,8 @@ void MainWindow::build_ui()
     setup_log_panel();
     setup_diff_panel();
     setup_branch_panel();
+    // Repo Browser tab — added once engine_ is available in load_repo()
+    // (setup_repo_browser_panel() called from load_repo after engine_ exists)
 
     paned_.pack1(left_box_, true, false);
     paned_.pack2(notebook_, true, false);
@@ -322,6 +340,29 @@ void MainWindow::setup_branch_panel()
     notebook_.append_page(branch_scroll_, Glib::ustring("Branches"));
 }
 
+void MainWindow::setup_repo_browser_panel()
+{
+    if (!engine_ || !engine_->repo()) return;
+    repo_browser_ = std::make_unique<RepoBrowser>(*engine_);
+    repo_browser_->signal_open_file().connect([&](const std::string& path,
+                                                   const std::string& content) {
+        // Show file content in a dialog.
+        auto* dlg = new Gtk::Dialog("File: " + path, *this, true);
+        auto* tv = Gtk::make_managed<Gtk::TextView>();
+        tv->set_editable(false);
+        ui::set_monospace(*tv);
+        tv->get_buffer()->set_text(content);
+        auto* scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
+        scroll->add(*tv);
+        dlg->get_content_area()->pack_start(*scroll, true, true, 0);
+        dlg->add_button("_Close", Gtk::RESPONSE_CLOSE);
+        dlg->set_default_size(700, 500);
+        dlg->signal_response().connect([dlg](int) { delete dlg; });
+        dlg->show_all();
+    });
+    notebook_.append_page(*repo_browser_, Glib::ustring("Repo Browser"));
+}
+
 // ─── Load / Refresh ─────────────────────────────────────────────────────────
 
 void MainWindow::load_repo(const std::string& path)
@@ -345,6 +386,7 @@ void MainWindow::load_repo(const std::string& path)
     refresh_log();
     refresh_branches();
     update_branch_label();
+    setup_repo_browser_panel();
 }
 
 void MainWindow::refresh_status()
@@ -528,7 +570,10 @@ void MainWindow::on_clone()
     if (dlg.run() == Gtk::RESPONSE_OK) {
         CloneOpts opts;
         opts.branch = dlg.branch();
+        opts.bare = dlg.bare();
         if (!dlg.target_dir().empty()) opts.working_dir = dlg.target_dir();
+        std::string ssh_key = dlg.ssh_key();
+        if (!ssh_key.empty()) opts.ssh_key = ssh_key;
         auto r = engine_->clone(dlg.url(), opts);
         if (!r.ok()) {
             Gtk::MessageDialog(*this, "Clone failed: " + r.error.message,
@@ -550,10 +595,15 @@ void MainWindow::on_commit()
         return;
     }
     CommitDialog dlg(*this, *engine_);
-    if (dlg.run() == Gtk::RESPONSE_OK) {
+    dlg.signal_commit_ready().connect([&](const std::string& msg, bool amend,
+                                          bool signoff, bool gpg_sign,
+                                          const std::string& gpg_key) {
         CommitOpts opts;
-        opts.message = dlg.message();
-        opts.amend  = dlg.amend();
+        opts.message  = msg;
+        opts.amend    = amend;
+        opts.signoff  = signoff;
+        opts.gpg_sign = gpg_sign;
+        opts.gpg_key_id = gpg_key;
         auto r = engine_->commit(opts);
         if (!r.ok()) {
             Gtk::MessageDialog(*this, "Commit failed: " + r.error.message,
@@ -563,7 +613,8 @@ void MainWindow::on_commit()
             refresh_log();
             update_branch_label();
         }
-    }
+    });
+    dlg.run();
     dlg.hide();
 }
 
@@ -764,8 +815,19 @@ void MainWindow::on_revert_selected()
     Glib::RefPtr<Gtk::TreeModel> model;
     auto it = file_tree_.get_selection()->get_selected(model);
     if (!it) return;
-    engine_->checkout("HEAD", {});
-    refresh_status();
+    std::string fpath = (*it).get_value(cols_.col_path);
+    if (fpath.empty()) return;
+
+    // Revert the specific file to its HEAD state.
+    CheckoutOpts opts;
+    opts.start_point = "HEAD";
+    auto r = engine_->checkout(fpath, opts);
+    if (!r.ok()) {
+        Gtk::MessageDialog(*this, "Revert failed: " + r.error.message,
+                          true, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true).run();
+    } else {
+        refresh_status();
+    }
 }
 
 void MainWindow::on_delete_selected()
