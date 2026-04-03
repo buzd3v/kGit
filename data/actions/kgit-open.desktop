@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=kGit — Open Repository
+Comment=Open this Git repository with kGit
+MimeType=inode/directory;
+Exec=kgit --open %f
+Icon=kgit
+Type=Action
+TargetLocation=/

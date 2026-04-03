@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Initialize Git Repository
+Comment=Create a new Git repository in this directory
+MimeType=inode/directory;
+Exec=kgit --init %f
+Icon=kgit
+Type=Action
+TargetLocation=/

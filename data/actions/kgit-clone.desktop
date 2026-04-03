@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Clone Git Repository Here
+Comment=Clone a Git repository into this directory
+MimeType=inode/directory;
+Exec=kgit --clone %f
+Icon=kgit
+Type=Action
+TargetLocation=/
