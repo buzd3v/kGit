@@ -40,6 +40,22 @@ target_link_libraries(kgit PRIVATE
 )
 target_compile_options(kgit PRIVATE ${GTKMM_CFLAGS_OTHER} ${LIBGIT2_CFLAGS_OTHER})
 
+# Unit tests — no GTK, only libgit2
+find_package(PkgConfig)
+pkg_check_modules(LIBGIT2TEST REQUIRED libgit2)
+add_executable(kgit_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/git_engine_test.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/git_engine.cpp
+)
+target_include_directories(kgit_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${LIBGIT2TEST_INCLUDE_DIRS}
+)
+target_link_libraries(kgit_test PRIVATE
+    ${LIBGIT2TEST_LIBRARIES}
+    pthread
+)
+
 # Install binary
 install(TARGETS kgit DESTINATION bin)
 

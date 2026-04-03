@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
+#include <cstdint>
 #include <filesystem>
 #include "../src/git_engine.hpp"
 
